@@ -27,6 +27,12 @@ RUN CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /out/whatsapp-bridge .
 # ---------- runtime stage ----------
 FROM ${BUILD_FROM}
 
+# Guard: if build.yaml was rejected by the Supervisor, BUILD_FROM silently
+# becomes the Home Assistant base image, whose s6-overlay entrypoint cannot
+# run under init: true. Fail here with a readable message rather than ship a
+# container that dies with "s6-overlay-suexec: fatal: can only run as pid 1".
+RUN if [ -e /init ]; then echo "ERROR: base image ships s6-overlay; build.yaml was not applied" >&2; exit 1; fi
+
 RUN apk add --no-cache python3 jq sqlite ca-certificates tzdata
 
 COPY --from=build /out/whatsapp-bridge /usr/local/bin/whatsapp-bridge

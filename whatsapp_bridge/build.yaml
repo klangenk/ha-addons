@@ -1,4 +1,10 @@
+# The Supervisor validates these values against RE_DOCKER_IMAGE_BUILD, which
+# requires at least two slash-separated path components. A bare "alpine:3.21"
+# fails that check, the whole build config is then discarded, and the add-on
+# silently falls back to the Home Assistant base image - which ships
+# s6-overlay and dies with "s6-overlay-suexec: fatal: can only run as pid 1"
+# because this add-on runs with init: true. So: fully qualified, always.
 build_from:
-  aarch64: alpine:3.21
-  amd64: alpine:3.21
-  armv7: alpine:3.21
+  aarch64: docker.io/library/alpine:3.21
+  amd64: docker.io/library/alpine:3.21
+  armv7: docker.io/library/alpine:3.21

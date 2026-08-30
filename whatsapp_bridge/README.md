@@ -102,6 +102,27 @@ To reach the API from a browser instead, set a free host port under
 **Configuration -> Network** (8081 itself is often taken) and use
 `http://<pi-ip>:<that port>/...`.
 
+## Base image
+
+This add-on builds on plain Alpine, not on a Home Assistant base image: the HA
+bases ship s6-overlay, which would mean `init: false` plus an `s6-rc.d` service
+tree for what is two processes. Alpine plus `init: true` lets the Supervisor
+provide PID 1 and `run.sh` supervise both children.
+
+One trap when changing `build.yaml`: the Supervisor validates `build_from`
+against a regex that demands **at least two slash-separated path components**.
+A bare `alpine:3.21` does not match, and the failure is silent - the whole build
+config is discarded and the add-on falls back to the HA base image. The
+s6-overlay in that image then refuses to start under `init: true`:
+
+```
+s6-overlay-suexec: fatal: can only run as pid 1
+```
+
+So always write the image fully qualified (`docker.io/library/alpine:3.21`).
+The runtime stage of the Dockerfile checks for `/init` and fails the build
+loudly if this ever regresses.
+
 ## Security notes
 
 - Port 8080 is set to `null` in `config.yaml`, so the bridge's send/download REST API
