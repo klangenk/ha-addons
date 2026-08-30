@@ -1,5 +1,5 @@
 name: WhatsApp Bridge
-version: "1.0.3"
+version: "1.0.4"
 slug: whatsapp_bridge
 description: >-
   WhatsApp Web bridge (lharries/whatsapp-mcp) with a read-only HTTP API that

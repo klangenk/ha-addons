@@ -1,7 +1,9 @@
-ARG BUILD_FROM=alpine:3.21
+ARG BUILD_FROM=docker.io/library/alpine:3.21
 
 # ---------- build stage: compile the Go bridge ----------
-FROM golang:1.24-alpine AS build
+# 1.27 because current whatsmeow declares go 1.26 / toolchain go1.27; an
+# older builder would download a toolchain mid-build on the Pi.
+FROM golang:1.27-alpine AS build
 
 # Pinned so a rebuild produces the same binary. Bump deliberately.
 ARG WA_MCP_REF=7d6a06dcdce1f01dfb24f60e1030d5efba9f3b88
@@ -17,10 +19,18 @@ RUN git init -q . \
 
 WORKDIR /src/whatsapp-bridge
 
-# The bridge only renders the pairing QR as half-block characters, which the
-# Home Assistant log panel mangles. Also print the raw code so it can be turned
-# into a QR elsewhere. Harmless no-op if upstream changes this line.
-RUN sed -i 's|qrterminal\.GenerateHalfBlock(evt\.Code, qrterminal\.L, os\.Stdout)|fmt.Println("QR_CODE_RAW:", evt.Code); qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)|' main.go && gofmt -e main.go > /dev/null
+# Upstream pins whatsmeow from 2025-03 and has seen no commit since 2025-07.
+# That whatsmeow announces a WhatsApp Web client version the servers now reject
+# outright ("Client outdated (405) connect failure"), so pull a current one -
+# pinned, like everything else here, so a rebuild stays reproducible.
+ARG WHATSMEOW_REF=v0.0.0-20260828224850-0fadda796019
+RUN go get go.mau.fi/whatsmeow@${WHATSMEOW_REF} && go mod tidy
+
+# Adapts the 2025-03 upstream sources to that whatsmeow (five calls gained a
+# context parameter) and prints the pairing QR in a form the HA log survives.
+# The script verifies every substitution and fails the build if one misses.
+COPY patch_upstream.sh /tmp/patch_upstream.sh
+RUN sh /tmp/patch_upstream.sh main.go
 
 RUN CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /out/whatsapp-bridge .
 

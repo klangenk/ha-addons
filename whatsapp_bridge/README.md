@@ -16,14 +16,18 @@ for a chat client. n8n gets JSON over HTTP instead.
 
 ## Install
 
-1. Copy this folder to `/addons/whatsapp_bridge/` on the Pi - via the **Samba share**
-   add-on (`addons` share) or the **Advanced SSH & Web Terminal** add-on.
-2. Settings → Add-ons → Add-on Store → ⋮ → **Check for updates**. The add-on shows up
-   under "Local add-ons".
-3. Install. The first build compiles whatsmeow from source with CGO - expect
-   **10-20 minutes on a Pi 4** and make sure the Pi has internet.
-4. Configuration tab → set `api_token` to a long random string. Save.
-5. Start, then open the **Log** tab.
+1. Settings → Add-ons → Add-on Store → ⋮ → **Repositories** → add
+   `https://github.com/klangenk/ha-addons`. (On Home Assistant OS there is no host
+   shell, so the alternative is copying this folder to `/addons/whatsapp_bridge/`
+   through the Samba share or SSH add-on.)
+2. Install **WhatsApp Bridge** from the new repository section. The first build
+   compiles whatsmeow from source with CGO - expect **10-20 minutes on a Pi 4**,
+   and the Pi needs internet.
+3. Configuration tab → set `api_token` to a long random string. Save.
+4. Start, then open the **Log** tab.
+
+Updates need a bumped `version:` in `config.yaml`; without one the Supervisor does
+not notice a push.
 
 ## First start: pairing
 
@@ -101,6 +105,35 @@ Authenticate with an n8n **Header Auth** credential sending
 To reach the API from a browser instead, set a free host port under
 **Configuration -> Network** (8081 itself is often taken) and use
 `http://<pi-ip>:<that port>/...`.
+
+## Upstream, and what is patched
+
+Upstream has had no commit since 2025-07 and pins whatsmeow from 2025-03. That
+whatsmeow announces a WhatsApp Web client version the servers reject on sight:
+
+```
+[Client ERROR] Client outdated (405) connect failure (client version: 2.3000.1021018791)
+```
+
+So the build pins a current whatsmeow (`WHATSMEOW_REF`) instead, and
+`patch_upstream.sh` adapts the old sources to it. Five calls gained a
+`context.Context` first parameter in the meantime:
+
+| Call | Now |
+|---|---|
+| `sqlstore.New(...)` | `sqlstore.New(ctx, ...)` |
+| `container.GetFirstDevice()` | `GetFirstDevice(ctx)` |
+| `client.Download(msg)` | `Download(ctx, msg)` |
+| `client.GetGroupInfo(jid)` | `GetGroupInfo(ctx, jid)` |
+| `Store.Contacts.GetContact(jid)` | `GetContact(ctx, jid)` |
+
+The same script also makes the pairing QR readable in the HA log panel. It checks
+that every substitution actually changed the file, so if either pin moves the build
+fails with the patch name rather than shipping something subtly broken.
+
+The Go builder is `golang:1.27-alpine` because current whatsmeow declares
+`go 1.26` / `toolchain go1.27` - an older builder would pull a toolchain mid-build
+on the Pi.
 
 ## Base image
 
