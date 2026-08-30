@@ -20,7 +20,7 @@ WORKDIR /src/whatsapp-bridge
 # The bridge only renders the pairing QR as half-block characters, which the
 # Home Assistant log panel mangles. Also print the raw code so it can be turned
 # into a QR elsewhere. Harmless no-op if upstream changes this line.
-RUN sed -i 's|qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)|fmt.Println("QR_CODE_RAW:", evt.Code); \&|' main.go
+RUN sed -i 's|qrterminal\.GenerateHalfBlock(evt\.Code, qrterminal\.L, os\.Stdout)|fmt.Println("QR_CODE_RAW:", evt.Code); qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)|' main.go && gofmt -e main.go > /dev/null
 
 RUN CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /out/whatsapp-bridge .
 
