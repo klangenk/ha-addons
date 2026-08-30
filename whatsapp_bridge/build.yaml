@@ -1,0 +1,4 @@
+build_from:
+  aarch64: alpine:3.21
+  amd64: alpine:3.21
+  armv7: alpine:3.21

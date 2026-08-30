@@ -1,0 +1,35 @@
+name: WhatsApp Bridge
+version: "1.0.0"
+slug: whatsapp_bridge
+description: >-
+  WhatsApp Web bridge (lharries/whatsapp-mcp) with a read-only HTTP API that
+  lists chats where the last message was not from you.
+url: https://github.com/lharries/whatsapp-mcp
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: true
+startup: services
+boot: auto
+
+ports:
+  8081/tcp: 8081
+  8080/tcp: null
+ports_description:
+  8081/tcp: >-
+    Unanswered-chats API (read-only, Bearer token). This is the one n8n calls.
+  8080/tcp: >-
+    whatsapp-bridge REST API (send messages / download media). UNAUTHENTICATED -
+    leave this closed unless you know you need it.
+
+options:
+  api_token: ""
+  grace_hours: 4
+  lookback_days: 14
+  include_groups: false
+schema:
+  api_token: password
+  grace_hours: int(0,720)
+  lookback_days: int(1,365)
+  include_groups: bool
