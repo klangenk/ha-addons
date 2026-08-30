@@ -1,5 +1,5 @@
 name: WhatsApp Bridge
-version: "1.0.1"
+version: "1.0.2"
 slug: whatsapp_bridge
 description: >-
   WhatsApp Web bridge (lharries/whatsapp-mcp) with a read-only HTTP API that
@@ -14,11 +14,14 @@ startup: services
 boot: auto
 
 ports:
-  8081/tcp: 8081
+  8081/tcp: null
   8080/tcp: null
 ports_description:
   8081/tcp: >-
     Unanswered-chats API (read-only, Bearer token). This is the one n8n calls.
+    Left closed by default: other add-ons reach it over the internal Docker
+    network by hostname, so publishing it to the LAN is only needed for
+    debugging from a browser. Pick a free host port if you do.
   8080/tcp: >-
     whatsapp-bridge REST API (send messages / download media). UNAUTHENTICATED -
     leave this closed unless you know you need it.

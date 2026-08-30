@@ -76,17 +76,31 @@ line. Returns:
 
 ## Calling it from n8n
 
-Both add-ons sit on the same Docker network, so n8n can reach this one by hostname
-without publishing anything to the LAN:
+Both add-ons sit on the same Docker network, so n8n reaches this one by hostname -
+nothing has to be published to the LAN, which is why `8081/tcp` maps to `null`
+by default.
+
+The hostname is the add-on's **full slug with underscores turned into dashes**,
+and that slug carries a prefix identifying where the add-on came from:
+
+| Installed from | Slug | Hostname |
+|---|---|---|
+| this repository | `<repo-hash>_whatsapp_bridge` | `<repo-hash>-whatsapp-bridge` |
+| a folder in `/addons` | `local_whatsapp_bridge` | `local-whatsapp-bridge` |
+
+The repo hash is stable per repository. Read it off any Supervisor log line about
+this add-on, or off the URL of its page in the UI:
 
 ```
-http://local-whatsapp-bridge:8081/api/unanswered?hours=4&context=15
+http://<repo-hash>-whatsapp-bridge:8081/api/unanswered?hours=4&context=15
 ```
 
-If that name does not resolve, fall back to the Pi's IP on the mapped port
-(`http://<pi-ip>:8081/...`) - port 8081 is published by default in `config.yaml`.
 Authenticate with an n8n **Header Auth** credential sending
 `Authorization: Bearer <api_token>`.
+
+To reach the API from a browser instead, set a free host port under
+**Configuration -> Network** (8081 itself is often taken) and use
+`http://<pi-ip>:<that port>/...`.
 
 ## Security notes
 
