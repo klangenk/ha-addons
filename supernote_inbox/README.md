@@ -1,8 +1,8 @@
 # Supernote Convert - Home Assistant add-on
 
 Turns a Supernote `.note` notebook into its pages: the recognised text the
-device already embedded, or a PNG for pages it could not read. One endpoint,
-no state, no credentials.
+device already embedded, or a PNG for pages it could not read. No state, no
+credentials, no scheduler.
 
 It exists so handwritten notes can enter the existing capture pipeline
 (Supernote → Nextcloud → n8n → Inbox → Obsidian) as ordinary text captures.
@@ -27,8 +27,24 @@ and the response says so via `realtime_recognition: false`.
 
 ```
 GET  /health
-POST /convert?images=true       body: the raw .note file
+POST /convert?images=true       body: the raw .note file -> JSON, one entry per page
+POST /convert/text              body: the raw .note file -> plain text
 ```
+
+`/convert` is the pipeline's path. `/convert/text` returns the whole notebook
+as one document and is meant for looking at a notebook by hand:
+
+```bash
+curl --data-binary @Ideen.note http://<addon-hostname>:8099/convert/text
+```
+
+It is **not** a shortcut for the pipeline, tempting as that is: plain text
+carries no `page_id` and no `digest`, so there is nothing left to deduplicate
+against and every sync would push the entire notebook into the Inbox again -
+after a month, sixty pages of which fifty-eight are already in the vault. The
+state would have to move back into the add-on to make that work. It produces
+the same layout as the pipeline's join step, so what you see here is what the
+Inbox would get. `?page_headers=false` drops the `--- Seite N ---` lines.
 
 **Authentication is optional and off by default.** With the port unpublished,
 the only clients that can reach the service are other add-ons and Home

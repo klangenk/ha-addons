@@ -1,5 +1,5 @@
 name: Supernote Convert
-version: "1.1.0"
+version: "1.2.0"
 slug: supernote_inbox
 description: >-
   Read-only HTTP service that turns a Supernote .note file into its pages -

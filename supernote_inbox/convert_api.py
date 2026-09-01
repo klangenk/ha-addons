@@ -13,9 +13,14 @@ this on the Pi instead of on a GPU machine. Notebooks must be created as
 sketch images only.
 
     GET  /health
-    POST /convert?images=true          body: raw .note bytes
+    POST /convert?images=true          body: raw .note bytes -> JSON per page
+    POST /convert/text                 body: raw .note bytes -> plain text
 
-Both need `Authorization: Bearer <api_token>`.
+/convert is the pipeline's path: per-page entries carrying the page id and a
+digest, which is what makes deduplication possible downstream. /convert/text
+is for reading a notebook by hand and deliberately throws that away.
+
+Authentication is optional - see require_token().
 """
 
 from __future__ import annotations
@@ -32,7 +37,7 @@ from pathlib import Path
 
 import supernotelib as sn
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 MAX_UPLOAD_BYTES = 256 * 1024 * 1024  # a very long notebook, with room to spare
 OPTIONS_FILE = Path("/data/options.json")
@@ -120,11 +125,8 @@ def ink_digest(page) -> str:
     return digest.hexdigest()[:16] if chunks else ""
 
 
-@app.post("/convert", dependencies=[Depends(require_token)])
-async def convert(
-    request: Request,
-    images: bool = Query(default=True, description="render pages without text as PNG"),
-) -> JSONResponse:
+async def read_notebook(request: Request):
+    """Body -> parsed notebook, with the HTTP errors that go with it."""
     raw = await request.body()
     if not raw:
         raise HTTPException(status_code=400, detail="empty body, expected .note bytes")
@@ -145,10 +147,12 @@ async def convert(
         handle.close()
         Path(handle.name).unlink(missing_ok=True)
 
-    realtime = notebook.is_realtime_recognition()
-    if not realtime:
+    if not notebook.is_realtime_recognition():
         log.warning("notebook has no real-time recognition; text extraction will be empty")
+    return notebook
 
+
+def build_pages(notebook, images: bool) -> list[dict]:
     text_converter = sn.converter.TextConverter(notebook)
     image_converter = None
     pages = []
@@ -195,13 +199,51 @@ async def convert(
         sum(1 for p in pages if p["kind"] == "text"),
         sum(1 for p in pages if p["kind"] == "sketch"),
     )
+    return pages
+
+
+@app.post("/convert", dependencies=[Depends(require_token)])
+async def convert(
+    request: Request,
+    images: bool = Query(default=True, description="render pages without text as PNG"),
+) -> JSONResponse:
+    notebook = await read_notebook(request)
     return JSONResponse(
         {
-            "realtime_recognition": realtime,
+            "realtime_recognition": notebook.is_realtime_recognition(),
             "total_pages": notebook.get_total_pages(),
-            "pages": pages,
+            "pages": build_pages(notebook, images),
         }
     )
+
+
+@app.post("/convert/text", dependencies=[Depends(require_token)])
+async def convert_text(
+    request: Request,
+    page_headers: bool = Query(default=True, description="insert a --- Seite N --- line"),
+) -> PlainTextResponse:
+    """The whole notebook as one plain-text document.
+
+    Not the path the capture pipeline takes: without page_id and digest there
+    is nothing to deduplicate against, so every sync would push the entire
+    notebook into the Inbox again. This is for looking at a notebook by hand -
+    `curl --data-binary @notiz.note .../convert/text` - and it produces the
+    same layout the pipeline's join step does, so what you see here is what
+    the Inbox would get.
+    """
+    notebook = await read_notebook(request)
+    parts = []
+    for entry in build_pages(notebook, images=False):
+        if entry["kind"] == "text":
+            body = entry["text"]
+        elif entry["kind"] == "sketch":
+            # named rather than dropped, so a page of pure drawing does not
+            # silently vanish from the document
+            body = "(Skizze, kein erkannter Text)"
+        else:
+            continue
+        parts.append(f"--- Seite {entry['page']} ---\n\n{body}" if page_headers else body)
+    return PlainTextResponse("\n\n".join(parts) + ("\n" if parts else ""))
 
 
 def main() -> None:
