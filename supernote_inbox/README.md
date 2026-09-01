@@ -37,7 +37,7 @@ folder mirror below uses, and what to reach for when looking at a notebook by
 hand:
 
 ```bash
-curl --data-binary @Ideen.note http://<addon-hostname>:8099/convert/text
+curl --data-binary @Ideen.note http://ee64ca8a-supernote-inbox:8099/convert/text
 ```
 
 `?page_headers=false` drops the `--- Seite N ---` lines.
@@ -122,11 +122,14 @@ and the slug carries a prefix for where the add-on came from:
 
 | installed from | slug | hostname |
 |---|---|---|
-| this repository | `<repo-hash>_supernote_inbox` | `<repo-hash>-supernote-inbox` |
+| this repository | `ee64ca8a_supernote_inbox` | **`ee64ca8a-supernote-inbox`** |
 | a folder in `/addons` | `local_supernote_inbox` | `local-supernote-inbox` |
 
-Read the actual one off any Supervisor log line for the add-on, or off the URL
-of its page in the UI.
+`ee64ca8a` identifies the *repository*, not the add-on, so it is the same
+prefix whatsapp_bridge carries. It is derived from the repository URL, so
+re-adding the repo under a different form of the URL would change it - read
+the actual value off any Supervisor log line for the add-on, or off the URL of
+its page in the UI (`/hassio/addon/ee64ca8a_supernote_inbox/info`).
 
 For a quick check from a browser, set a free host port under
 **Configuration → Network** instead.
@@ -181,7 +184,7 @@ cadence:
 5. **Loop Over Items**, batch size 1. Everything below runs per notebook,
    which is what makes step 9 unambiguous.
 6. **Nextcloud → Download**, then **HTTP Request** `POST` to
-   `http://<addon-hostname>:8099/convert`, body = the binary field. No
+   `http://ee64ca8a-supernote-inbox:8099/convert`, body = the binary field. No
    credential needed unless you set `api_token`.
 7. **Split Out** on `pages`. While running with `images=false`, add a
    **Filter** `{{ $json.kind !== 'sketch' }}` here - see the warning under
