@@ -42,7 +42,14 @@ debugging; requests then need `Authorization: Bearer <api_token>`. The startup
 log line says which mode is active.
 
 `images=false` skips PNG rendering and returns sketch pages as metadata only -
-useful when the caller just wants to know whether anything changed.
+useful for getting the text path working first, before letting a Pi render
+1404x1872 pages.
+
+> **If you run with `images=false`, filter `kind == "sketch"` out before the
+> page dedupe.** Otherwise those pages are recorded as seen while producing
+> no file at all, and switching to `images=true` later will not bring them
+> back - the dedupe already knows them. Drop the filter when you flip the
+> flag, and every sketch page shows up as new.
 
 Response:
 
@@ -66,6 +73,8 @@ Response:
 | `page_id` | the Supernote's own page id - **stable across edits and reordering** |
 | `kind` | `text`, `sketch` (ink but no recognised text) or `empty` |
 | `digest` | short hash of the text, or of the raw ink for sketches |
+| `text` | on `kind: text` only |
+| `png_base64` | on `kind: sketch` only, and only with `images=true` - the key is **absent**, not null, otherwise |
 
 `page_id` plus `digest` is the pair that makes deduplication possible: the id
 says *which* page, the digest says *whether it changed*. A notebook is a living
@@ -126,7 +135,9 @@ folder, different cadence:
 6. **Nextcloud → Download**, then **HTTP Request** `POST` to
    `http://<addon-hostname>:8099/convert`, body = the binary field. No
    credential needed unless you set `api_token`.
-7. **Split Out** on `pages`.
+7. **Split Out** on `pages`. While running with `images=false`, add a
+   **Filter** `{{ $json.kind !== 'sketch' }}` here - see the warning under
+   *API*.
 8. **Remove Duplicates** (*seen in previous executions*), key
    `page_id|digest` - this is the one that keeps the Inbox clean. New page or
    edited page passes, everything else stops here.
