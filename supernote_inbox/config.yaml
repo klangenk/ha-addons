@@ -1,5 +1,5 @@
 name: Supernote Convert
-version: "1.0.0"
+version: "1.1.0"
 slug: supernote_inbox
 description: >-
   Read-only HTTP service that turns a Supernote .note file into its pages -
@@ -19,13 +19,17 @@ ports:
   8099/tcp: null
 ports_description:
   8099/tcp: >-
-    Conversion API (read-only, Bearer token). Left closed by default: n8n sits
-    on the same Docker network and reaches it by hostname, so publishing it to
-    the LAN is only needed for debugging from a browser. Pick a free host port
-    if you do - the Supervisor refuses to start the add-on if the host port is
-    already taken.
+    Conversion API (read-only). Left closed by default: n8n sits on the same
+    Docker network and reaches it by hostname, so publishing it to the LAN is
+    only needed for debugging from a browser. If you do publish it, pick a
+    free host port - the Supervisor refuses to start the add-on if the port is
+    already taken - and set api_token, because an open port means an open API.
 
 options:
+  # Optional. Empty means the service takes requests from anyone who can reach
+  # it - which, with the port unpublished, is other add-ons and Home Assistant
+  # itself. There is nothing behind this endpoint to protect: no data at rest,
+  # no credentials, no write path. Set a token if you publish the port.
   api_token: ""
   log_level: "info"
 schema:

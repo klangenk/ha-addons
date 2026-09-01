@@ -26,10 +26,20 @@ and the response says so via `realtime_recognition: false`.
 ## API
 
 ```
-GET  /health                    open, so a health check needs no secret
+GET  /health
 POST /convert?images=true       body: the raw .note file
-                                needs Authorization: Bearer <api_token>
 ```
+
+**Authentication is optional and off by default.** With the port unpublished,
+the only clients that can reach the service are other add-ons and Home
+Assistant itself - and there is nothing here to reach: no data at rest, no
+credentials, no write path, and a response that contains only what the caller
+just uploaded. That is what separates it from the WhatsApp add-on next door,
+whose API serves the entire chat history and is therefore never open.
+
+Set `api_token` if you publish the port under **Configuration → Network** for
+debugging; requests then need `Authorization: Bearer <api_token>`. The startup
+log line says which mode is active.
 
 `images=false` skips PNG rendering and returns sketch pages as metadata only -
 useful when the caller just wants to know whether anything changed.
@@ -62,8 +72,8 @@ says *which* page, the digest says *whether it changed*. A notebook is a living
 file - it changes with every stroke - so without that pair every sync would
 re-emit every page.
 
-Errors: `401` wrong or missing token, `400` empty body, `413` over 256 MB,
-`422` not a readable `.note` file.
+Errors: `400` empty body, `413` over 256 MB, `422` not a readable `.note`
+file, and `401` for a bad token when `api_token` is set.
 
 ## Install
 
@@ -71,8 +81,9 @@ Errors: `401` wrong or missing token, `400` empty body, `413` over 256 MB,
    `https://github.com/klangenk/ha-addons`.
 2. Install **Supernote Convert**. The build only installs wheels - about a
    minute on a Pi 4, unlike the WhatsApp add-on next door.
-3. Configuration tab → set `api_token` to a long random string. Save, start.
-4. Check the Log tab for `listening on port 8099`.
+3. Start it. No configuration needed - `api_token` stays empty unless you
+   publish the port.
+4. Check the Log tab for `listening on port 8099, open (no api_token set)`.
 
 Updates need a bumped `version:` in `config.yaml`; without one the Supervisor
 does not notice a push.
@@ -113,8 +124,8 @@ folder, different cadence:
 5. **Loop Over Items**, batch size 1. Everything below runs per notebook,
    which is what makes step 9 unambiguous.
 6. **Nextcloud → Download**, then **HTTP Request** `POST` to
-   `http://<addon-hostname>:8099/convert`, body = the binary field, header
-   auth credential with the bearer token.
+   `http://<addon-hostname>:8099/convert`, body = the binary field. No
+   credential needed unless you set `api_token`.
 7. **Split Out** on `pages`.
 8. **Remove Duplicates** (*seen in previous executions*), key
    `page_id|digest` - this is the one that keeps the Inbox clean. New page or

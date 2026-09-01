@@ -58,9 +58,24 @@ API_TOKEN = str(OPTIONS["api_token"])
 
 
 def require_token(authorization: str = Header(default="")) -> None:
-    expected = f"Bearer {API_TOKEN}"
+    """No api_token configured means an open service, on purpose.
+
+    The port is not published to the host, so the only clients that can reach
+    this are other add-ons and Home Assistant itself - and there is nothing
+    here worth reaching: no data at rest, no credentials, no write path. The
+    response contains only what the caller just uploaded.
+
+    That is the difference from the WhatsApp add-on next door, whose API hands
+    out the entire chat history and is therefore never open.
+
+    Set api_token if you publish the port under Configuration -> Network for
+    debugging: then a binary parser is sitting on the LAN, and it should not
+    take requests from everyone.
+    """
+    if not API_TOKEN:
+        return
     # compare_digest so a wrong token cannot be found one character at a time
-    if not API_TOKEN or not secrets.compare_digest(authorization, expected):
+    if not secrets.compare_digest(authorization, f"Bearer {API_TOKEN}"):
         raise HTTPException(status_code=401, detail="invalid or missing bearer token")
 
 
@@ -196,9 +211,11 @@ def main() -> None:
         level=getattr(logging, str(OPTIONS["log_level"]).upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(message)s",
     )
-    if not API_TOKEN:
-        raise SystemExit("api_token is not set - refusing to start without authentication")
-    log.info("listening on port %d", OPTIONS["port"])
+    log.info(
+        "listening on port %d, %s",
+        OPTIONS["port"],
+        "bearer token required" if API_TOKEN else "open (no api_token set)",
+    )
     uvicorn.run(app, host="0.0.0.0", port=OPTIONS["port"], log_level="warning")
 
 
