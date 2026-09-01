@@ -1,0 +1,14 @@
+# Debian-slim, not Alpine. supernotelib pulls numpy, Pillow, reportlab and
+# svglib; those ship prebuilt aarch64 wheels for glibc but not consistently
+# for musl, so on Alpine the Pi would compile numpy from source on every
+# build. glibc keeps the first build at about a minute.
+#
+# Fully qualified, always: the Supervisor validates build_from against
+# RE_DOCKER_IMAGE_BUILD, which requires at least two slash-separated path
+# components. A bare "python:3.13-slim" fails that check, the whole build
+# config is then discarded, and the add-on silently falls back to the Home
+# Assistant base image - which ships s6-overlay and dies with
+# "s6-overlay-suexec: fatal: can only run as pid 1" under init: true.
+build_from:
+  aarch64: docker.io/library/python:3.13-slim
+  amd64: docker.io/library/python:3.13-slim
