@@ -110,20 +110,60 @@ folder, different cadence:
    converted.
 4. **Remove Duplicates** (*seen in previous executions*), key `path|etag` -
    so a notebook is only downloaded and converted when it actually changed.
-5. **Nextcloud → Download**, then **HTTP Request** `POST` to
+5. **Loop Over Items**, batch size 1. Everything below runs per notebook,
+   which is what makes step 9 unambiguous.
+6. **Nextcloud → Download**, then **HTTP Request** `POST` to
    `http://<addon-hostname>:8099/convert`, body = the binary field, header
    auth credential with the bearer token.
-6. **Split Out** on `pages`.
-7. **Remove Duplicates** (*seen in previous executions*), key
+7. **Split Out** on `pages`.
+8. **Remove Duplicates** (*seen in previous executions*), key
    `page_id|digest` - this is the one that keeps the Inbox clean. New page or
    edited page passes, everything else stops here.
-8. **Code** node builds the capture filename from the notebook name and its
-   `modified` timestamp, e.g. `2026-09-01_18-42-10_Supernote_Ideen_S03.txt`.
-   Use the notebook's mtime, not the current time: it is the closest thing to
-   when the page was written, and it keeps filenames stable across runs.
-9. **Convert to File** (text, or base64 for `kind: sketch`) →
-   **Nextcloud → Upload** into `/Inbox`, where the existing capture pipeline
-   takes over.
+9. **Switch** on `kind`:
+   * `text` → **Sort** by `page` → **Aggregate** → a **Code** node joins the
+     pages into one document (see below) → **Convert to File** →
+     **Nextcloud → Upload** into `/Inbox`.
+   * `sketch` → straight to **Move Base64 String to File** → **Upload**, one
+     PNG per page.
+
+### Why the pages are joined again
+
+A page break in a notebook is where the paper ended, not where the thought
+ended - a sentence running across two pages would otherwise become two
+captures, neither of which makes sense alone. So the pages travel through the
+workflow individually, because that is what deduplication needs, and are put
+back together into one capture right before upload:
+
+```javascript
+const meta  = $('Loop Over Items').first().json;
+const pages = $input.first().json.data;          // Aggregate output
+const stem  = meta.path.split('/').pop()
+  .replace(/\.note$/i, '').replace(/[^\p{L}\p{N}.-]+/gu, '-');
+const ts    = DateTime.fromISO(meta.lastModified)
+  .setZone('Europe/Berlin').toFormat('yyyy-MM-dd_HH-mm-ss');
+const pad   = (n) => String(n).padStart(2, '0');
+const range = pages.length === 1
+  ? `S${pad(pages[0].page)}`
+  : `S${pad(pages[0].page)}-${pad(pages[pages.length - 1].page)}`;
+
+const header = [`# ${stem}`, `Quelle: Supernote, ${meta.path}`, ''].join('\n');
+const body = pages
+  .map((p) => [`--- Seite ${p.page} ---`, '', p.text].join('\n'))
+  .join('\n\n');
+
+return { json: {
+  filename: `${ts}_Supernote_${stem}_${range}.txt`,
+  content: `${header}\n${body}\n`,
+} };
+```
+
+One file per notebook per run, containing exactly the pages that are new. Use
+the notebook's mtime for the timestamp, not the current time: it is the
+closest thing to when the page was written, and it keeps filenames stable
+across runs.
+
+Guard the branch with a filter on a non-empty `data` before uploading -
+a run where every page was already known aggregates to nothing.
 
 The notebooks themselves are never moved or renamed. They belong to the
 device's sync, and archiving them the way the Inbox pipeline archives captures
