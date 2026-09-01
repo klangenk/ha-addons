@@ -148,10 +148,47 @@ deduplicate - same input, same output file.
 |---|---|---|
 | 1 | Schedule Trigger | every 5 minutes |
 | 2 | Nextcloud → Folder: List | `Supernote/Note` |
-| 3 | Filter | `{{ $json.path.endsWith('.note') }}` |
-| 4 | Remove Duplicates | *seen in previous executions*, `path\|eTag`. Optional - it saves the Pi from re-parsing every notebook every five minutes, but the mirror is correct without it |
+| 3 | Nextcloud → Folder: List | `Supernote/Text`, **Always Output Data on** - the folder is empty on the first run |
+| 4 | Code | keep only notebooks whose `.txt` is missing or older, see below |
 | 5 | Nextcloud → Download → HTTP Request | `POST /convert/text` |
 | 6 | Convert to File → Nextcloud → Upload | `Supernote/Text/<stem>.txt`, overwrite on |
+
+### Deciding what is new
+
+Compare the two folders rather than remembering what was already done. The
+target folder is the state - `make`'s rule, target older than source means
+rebuild:
+
+```javascript
+const done = new Map(
+  $('List text folder').all().map((i) => {
+    const stem = i.json.path.split('/').pop().replace(/\.txt$/i, '');
+    return [stem, new Date(i.json.lastModified).getTime()];
+  }),
+);
+
+return $('List notebooks').all()
+  .filter((i) => i.json.path.toLowerCase().endsWith('.note'))
+  .filter((i) => {
+    const stem = i.json.path.split('/').pop().replace(/\.note$/i, '');
+    const txt = done.get(stem);
+    return txt === undefined || new Date(i.json.lastModified).getTime() > txt;
+  });
+```
+
+This is self-healing, which a remembered-state approach is not. If an upload
+fails, the `.txt` stays missing and the next run picks the notebook up again.
+Delete a `.txt` and it regenerates. To reconvert everything, empty the target
+folder - there is no state anywhere else to reset.
+
+A **Remove Duplicates** node (*seen in previous executions*, key `path|eTag`)
+is the one-node version and works, but it marks a notebook as seen *before*
+the upload happens: one failure downstream and that notebook is recorded as
+done and never touched again, silently, until you edit it once more.
+
+No settle filter is needed here, unlike in the per-page workflow below. A
+notebook still being written in just gets converted a few times for nothing -
+the mirror overwrites, so there is no half-sentence capture to regret.
 
 Put the output wherever the reader lives. Outside the Obsidian vault keeps raw
 conversions from sitting among curated notes without frontmatter; inside its
