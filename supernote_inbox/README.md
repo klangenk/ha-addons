@@ -4,8 +4,9 @@ Turns a Supernote `.note` notebook into its pages: the recognised text the
 device already embedded, or a PNG for pages it could not read. No state, no
 credentials, no scheduler.
 
-It exists so handwritten notes can enter the existing capture pipeline
-(Supernote → Nextcloud → n8n → Inbox → Obsidian) as ordinary text captures.
+It exists so handwritten notes become readable to everything downstream of
+Nextcloud - first as a plain text mirror of the notebook folder, later, if
+wanted, as individual captures in the existing pipeline.
 
 ## What it deliberately does not do
 
@@ -31,20 +32,20 @@ POST /convert?images=true       body: the raw .note file -> JSON, one entry per 
 POST /convert/text              body: the raw .note file -> plain text
 ```
 
-`/convert` is the pipeline's path. `/convert/text` returns the whole notebook
-as one document and is meant for looking at a notebook by hand:
+`/convert/text` returns the whole notebook as one document. It is what the
+folder mirror below uses, and what to reach for when looking at a notebook by
+hand:
 
 ```bash
 curl --data-binary @Ideen.note http://<addon-hostname>:8099/convert/text
 ```
 
-It is **not** a shortcut for the pipeline, tempting as that is: plain text
-carries no `page_id` and no `digest`, so there is nothing left to deduplicate
-against and every sync would push the entire notebook into the Inbox again -
-after a month, sixty pages of which fifty-eight are already in the vault. The
-state would have to move back into the add-on to make that work. It produces
-the same layout as the pipeline's join step, so what you see here is what the
-Inbox would get. `?page_headers=false` drops the `--- Seite N ---` lines.
+`?page_headers=false` drops the `--- Seite N ---` lines.
+
+`/convert` returns the same content split per page, each entry carrying a
+`page_id` and a `digest`. Use it when the caller needs to tell which pages
+changed - that is the difference between mirroring a notebook and filing its
+pages, see the two workflows below.
 
 **Authentication is optional and off by default.** With the port unpublished,
 the only clients that can reach the service are other add-ons and Home
@@ -130,10 +131,41 @@ of its page in the UI.
 For a quick check from a browser, set a free host port under
 **Configuration → Network** instead.
 
-## The n8n side
+## The n8n side, first use case: mirror the folder
 
-A workflow of its own, separate from the Inbox pipeline - different source
-folder, different cadence:
+The simplest thing that is useful: one `.note` in, one `.txt` out, overwritten
+whenever the notebook changes. Nothing accumulates, so there is nothing to
+deduplicate - same input, same output file.
+
+```
+/Supernote/Note/Ideen.note   ->   /Supernote/Text/Ideen.txt
+```
+
+| # | Node | Configuration |
+|---|---|---|
+| 1 | Schedule Trigger | every 5 minutes |
+| 2 | Nextcloud → Folder: List | `Supernote/Note` |
+| 3 | Filter | `{{ $json.path.endsWith('.note') }}` |
+| 4 | Remove Duplicates | *seen in previous executions*, `path\|eTag`. Optional - it saves the Pi from re-parsing every notebook every five minutes, but the mirror is correct without it |
+| 5 | Nextcloud → Download → HTTP Request | `POST /convert/text` |
+| 6 | Convert to File → Nextcloud → Upload | `Supernote/Text/<stem>.txt`, overwrite on |
+
+Put the output wherever the reader lives. Outside the Obsidian vault keeps raw
+conversions from sitting among curated notes without frontmatter; inside its
+`Inbox/` hands them to the vault's librarian instead.
+
+## Later: per-page captures with routing
+
+The mirror gives you a readable copy of a notebook. What it does not do is
+*file* anything: a page holding a recipe does not end up in `Recipes/`, a
+todo does not reach Microsoft To-Do. That needs the pages to enter the capture
+pipeline individually, which in turn needs deduplication - otherwise every
+sync re-delivers pages that are already filed, and the difference has to be
+worked out by reading.
+
+That is what `/convert` and the `page_id|digest` pair are for. A workflow of
+its own, separate from the Inbox pipeline - different source folder, different
+cadence:
 
 1. **Schedule Trigger** - every few minutes.
 2. **Nextcloud → List files** on `/Supernote/Note`, the folder the device
